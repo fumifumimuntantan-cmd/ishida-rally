@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<title>石田卓球クラブ カチカチラリー</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="タップだけでラリーを続ける、石田卓球クラブのゆるい卓球ゲーム。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+/* Layout: one portrait game screen, centered; HUD on top, overlays for title / select / result. Single committed look (club colors), no dark variant. */
+:root{
+  --mizu:#A9DDF1;      /* 水色 floor */
+  --mizu-pale:#E6F6FC; /* wall */
+  --navy:#1B2A4A;      /* 紺 */
+  --red:#E0393E;
+  --yellow:#FFD23F;
+  --white:#FFFFFF;
+  --line:#06C755;
+  --f-display:"DotGothic16", "Hiragino Kaku Gothic ProN", "Yu Gothic", monospace;
+  --f-body:"Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+  color-scheme: light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--mizu);color:var(--navy);font-family:var(--f-body);font-size:14px;overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#stage{position:relative;width:100%;max-width:480px;height:100%;margin:0 auto;cursor:pointer}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+.hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;
+  padding:calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;pointer-events:none;gap:12px}
+.hud .score{font-family:var(--f-display);line-height:1}
+.hud .score small{display:block;font-size:12px;letter-spacing:.15em}
+.hud .score b{font-size:44px;font-weight:400;font-variant-numeric:tabular-nums}
+.hud .vs{font-family:var(--f-display);font-size:12px;margin-top:4px}
+.hud .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.hud .best{font-family:var(--f-display);font-size:13px;letter-spacing:.05em}
+.hud .btns{display:flex;gap:6px}
+.iconbtn{pointer-events:auto;font-family:var(--f-display);font-size:12px;background:var(--white);color:var(--navy);
+  border:2px solid var(--navy);border-radius:999px;padding:4px 10px;cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background:rgba(27,42,74,.35);cursor:default}
+.card{width:100%;max-width:360px;max-height:100%;overflow-y:auto;background:var(--white);border:3px solid var(--navy);border-radius:18px;
+  box-shadow:0 6px 0 var(--navy);padding:20px 18px 16px;display:flex;flex-direction:column;gap:12px;text-align:center;-webkit-user-select:text;user-select:text}
+.eyebrow{font-family:var(--f-display);font-size:13px;letter-spacing:.2em;color:var(--red)}
+.title{font-family:var(--f-display);font-size:40px;line-height:1.05;text-wrap:balance}
+.title span{display:inline-block;background:var(--yellow);padding:0 6px;border-radius:6px}
+.lead{margin:0;font-size:15px;line-height:1.7;font-weight:500}
+.field{display:flex;flex-direction:column;gap:6px;text-align:left}
+.field label{font-weight:900;font-size:13px}
+.field input{font:inherit;font-size:16px;border:2px solid var(--navy);border-radius:10px;padding:8px 10px;width:100%;min-width:0;color:var(--navy)}
+.field small{font-size:11px;opacity:.75}
+.rules{display:grid;gap:6px;text-align:left;font-size:13px;line-height:1.5;background:var(--mizu-pale);border-radius:12px;padding:10px 12px}
+.rules div{display:flex;gap:8px}
+.rules i{font-style:normal;font-family:var(--f-display);color:var(--red);flex:none}
+.btn{font-family:var(--f-display);font-size:22px;letter-spacing:.1em;background:var(--red);color:var(--white);
+  border:3px solid var(--navy);border-radius:14px;padding:12px;cursor:pointer;box-shadow:0 4px 0 var(--navy);text-decoration:none;display:block}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--navy)}
+.btn.sub{font-size:15px;background:var(--white);color:var(--navy);padding:9px}
+.btn.sub.share{background:var(--yellow)}
+.btnrow{display:grid;gap:8px}
+.btnrow.two{grid-template-columns:1fr 1fr}
+.foot{font-size:11px;line-height:1.6;opacity:.8}
+.big{font-family:var(--f-display);font-size:64px;line-height:1;font-variant-numeric:tabular-nums}
+.big small{font-size:20px;margin-left:4px}
+.rank{font-weight:900;font-size:19px}
+.rank em{font-style:normal;display:inline-block;background:var(--yellow);border-radius:6px;padding:2px 8px}
+.pill{font-family:var(--f-display);font-size:13px;color:var(--white);background:var(--red);border-radius:999px;padding:3px 10px;align-self:center}
+.pill.y{background:var(--yellow);color:var(--navy)}
+.copied{font-size:12px;min-height:1em}
+
+/* ranking */
+.board{background:var(--mizu-pale);border-radius:12px;padding:10px 12px;text-align:left;display:grid;gap:6px}
+.board .head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.board h3{margin:0;font-family:var(--f-display);font-weight:400;font-size:13px;color:var(--red);letter-spacing:.1em}
+.tabs{display:flex;gap:4px}
+.tab{font:inherit;font-size:12px;font-weight:700;border:2px solid var(--navy);background:var(--white);color:var(--navy);border-radius:999px;padding:2px 10px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--navy);color:var(--white)}
+.board ol{margin:0;padding:0;list-style:none;display:grid;gap:2px;font-size:13px;font-variant-numeric:tabular-nums}
+.board li{display:grid;grid-template-columns:2em minmax(0,1fr) auto;gap:6px;align-items:baseline;padding:2px 0;border-bottom:1px dashed rgba(27,42,74,.2)}
+.board li b{font-family:var(--f-display);font-weight:400;color:var(--red)}
+.board li .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.board li .vs{font-size:11px;opacity:.7;font-weight:500}
+.board li.me{background:#fff7d6}
+.board p{margin:0;font-size:12px;line-height:1.5}
+.board .note{font-size:10px;opacity:.65}
+
+/* opponent says */
+.says{display:flex;align-items:flex-end;gap:10px;text-align:left}
+.says img{width:64px;height:90px;object-fit:contain;object-position:bottom;flex:none}
+.bubble{flex:1;min-width:0;background:var(--mizu-pale);border:2px solid var(--navy);border-radius:14px;padding:8px 10px;font-weight:700;font-size:14px;line-height:1.5}
+.bubble b{display:block;font-family:var(--f-display);font-weight:400;font-size:11px;color:var(--red);letter-spacing:.08em}
+
+/* club call to action */
+.cta{background:var(--navy);color:var(--white);border-radius:14px;padding:12px;display:grid;gap:8px}
+.cta p{margin:0;font-weight:900;font-size:15px;line-height:1.5}
+.cta p small{display:block;font-weight:500;font-size:12px;opacity:.85}
+.cta .btn{font-size:16px;padding:10px;box-shadow:none;border-color:var(--white)}
+.cta .btn.line{background:var(--line)}
+.cta .btn.insta{background:var(--white);color:var(--navy);font-size:14px}
+.minicta{font-size:12px;font-weight:700;color:var(--navy)}
+.minicta a{color:var(--red)}
+
+/* opponent select */
+.oppgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.opp{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--mizu-pale);border:2px solid var(--navy);border-radius:12px;
+  padding:6px 4px;cursor:pointer;font:inherit;color:var(--navy)}
+.opp:hover{background:#fff7d6}
+.opp img{height:84px;width:100%;object-fit:contain;object-position:bottom}
+.opp .nm{font-weight:900;font-size:12px;line-height:1.25}
+.opp .st{font-family:var(--f-display);font-size:11px;color:var(--red);letter-spacing:.05em}
+.opp .bs{font-family:var(--f-display);font-size:10px;opacity:.75}
+.opp.locked{cursor:not-allowed;background:#dfe7ea}
+.opp.locked img{filter:brightness(0) opacity(.35)}
+.opp.locked .st{color:var(--navy)}
+.opp.boss{grid-column:1 / -1;flex-direction:row;justify-content:center;gap:14px;background:var(--navy);color:var(--white)}
+.opp.boss:hover{background:#26375c}
+.opp.boss.locked{background:#3a4660}
+.opp.boss img{width:70px;height:96px}
+.opp.boss .txt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left}
+.opp.boss .nm{font-size:16px}
+.opp.boss .st{color:var(--yellow)}
+.opp.boss .tag{font-family:var(--f-display);font-size:11px;background:var(--red);color:var(--white);border-radius:999px;padding:1px 8px}
+@media (prefers-reduced-motion: reduce){ .btn:active{transform:none} }
+</style>
+
+<div id="stage" aria-label="卓球ゲーム画面">
+  <canvas id="cv"></canvas>
+  <div class="hud">
+    <div class="score"><small>RALLY</small><b id="rally">0</b><div class="vs" id="vsName"></div></div>
+    <div class="right">
+      <div class="best">BEST <span id="best">0</span></div>
+      <div class="btns">
+        <button class="iconbtn" id="homeBtn" type="button">トップ</button>
+        <button class="iconbtn" id="mute" type="button" aria-pressed="false">音 ON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- top -->
+  <div class="overlay" id="titleScreen">
+    <div class="card">
+      <div class="eyebrow">石田卓球クラブ presents</div>
+      <div class="title">カチカチ<br><span>ラリー</span></div>
+      <p class="lead">ボールが来たらタップするだけ。<br>何回続くかな？</p>
+      <div class="field">
+        <label for="nameInput">ニックネーム（ランキングにのります）</label>
+        <input id="nameInput" type="text" maxlength="10" placeholder="例：ピンポン太郎" autocomplete="off" enterkeyhint="done">
+        <small>本名は入れないでね</small>
+      </div>
+      <button class="btn" id="startBtn" type="button">相手をえらぶ</button>
+      <div class="board" id="board">
+        <div class="head">
+          <h3>ランキング</h3>
+          <div class="tabs" role="tablist">
+            <button class="tab" id="tabWeek" role="tab" aria-selected="true" type="button">今週</button>
+            <button class="tab" id="tabAll" role="tab" aria-selected="false" type="button">歴代</button>
+          </div>
+        </div>
+        <ol id="boardList"></ol>
+        <p class="note" id="boardNote"></p>
+      </div>
+      <div class="rules">
+        <div><i>●</i><span>ボールが光る輪に来たら<b>タップ</b></span></div>
+        <div><i>●</i><span>早すぎると空振り、遅いと見送りで終了</span></div>
+        <div><i>●</i><span>ど真ん中で打つと<b>ドライブ</b>になって速く返る</span></div>
+        <div><i>●</i><span>遊ぶほど対戦相手が増える。最後は監督が待ってます</span></div>
+        <div><i>●</i><span>今週のランキングは毎週月曜にリセット</span></div>
+      </div>
+      <div class="minicta" id="topCta"></div>
+      <div class="foot">石田卓球クラブ（福岡県中間市）<br>小さい子から大人まで・初心者大歓迎</div>
+    </div>
+  </div>
+
+  <!-- select -->
+  <div class="overlay" id="selectScreen" hidden>
+    <div class="card">
+      <div class="eyebrow">対戦相手をえらんでね</div>
+      <div class="oppgrid" id="oppGrid"></div>
+      <button class="btn sub" id="backBtn" type="button">トップにもどる</button>
+    </div>
+  </div>
+
+  <!-- result -->
+  <div class="overlay" id="overScreen" hidden>
+    <div class="card">
+      <div class="eyebrow" id="overReason">ミス！</div>
+      <div class="big"><span id="finalRally">0</span><small>ラリー</small></div>
+      <div class="pill" id="newBest" hidden>自己ベスト更新！</div>
+      <div class="pill y" id="weekRank" hidden></div>
+      <div class="rank">称号 <em id="rankName">見学からどうぞ</em></div>
+      <div class="says">
+        <img id="saysImg" alt="">
+        <div class="bubble"><b id="saysName"></b><span id="saysLine"></span></div>
+      </div>
+      <div class="pill" id="unlockMsg" hidden></div>
+      <div class="btnrow">
+        <button class="btn" id="retryBtn" type="button">もう1回</button>
+        <div class="btnrow two">
+          <button class="btn sub share" id="shareBtn" type="button">シェア</button>
+          <button class="btn sub" id="copyBtn" type="button">結果をコピー</button>
+        </div>
+        <div class="btnrow two">
+          <button class="btn sub" id="changeBtn" type="button">相手を変える</button>
+          <button class="btn sub" id="topBtn" type="button">トップにもどる</button>
+        </div>
+      </div>
+      <div class="copied" id="copied" aria-live="polite"></div>
+      <div class="cta" id="cta" hidden>
+        <p>本物の卓球もやってみない？<small>石田卓球クラブ　体験練習うけつけ中</small></p>
+        <a class="btn line" id="ctaLine" target="_blank" rel="noopener" hidden>LINEで体験の相談をする</a>
+        <a class="btn insta" id="ctaInsta" target="_blank" rel="noopener" hidden>インスタでクラブの様子を見る</a>
+      </div>
+      <div class="foot">石田卓球クラブ（福岡県中間市）<br>小さい子から大人まで・初心者大歓迎</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+// =====================================================================
+//  設定（ここだけ書きかえればOK）
+// =====================================================================
+const CONFIG = {
+  rankingUrl: '',     // ランキング用 Google Apps Script の「ウェブアプリURL」（…/exec）
+  lineUrl: '',        // LINE公式アカウントの友だち追加URL（https://lin.ee/…）
+  instagramUrl: '',   // クラブのInstagramのURL
+  shareUrl: '',       // シェア文に入れるゲームのURL（空ならこのページのURL）
+};
+// フェンス広告の文言（石田卓球クラブと交互に、ここからランダムで出ます）
+const FENCE_WORDS = ['初心者歓迎', '体験レッスン受付中', 'ナイスラリー'];
+
+// キャラ設定
+//  look … 棒人間の見た目（shirt: シャツの色 / hair: short・pony・bald・long / glasses / band: はちまき）
+//  img  … 画像を使うときは chars/〇〇.png を指定（指定すると棒人間のかわりに画像が出る）
+//  unlock … 何回遊んだら対戦できるようになるか
+//  speed … 大きいほど球がゆっくり / ev … 変な球の出やすさ
+const CHARACTERS = [
+  { id:'senpai', name:'やさしい先輩', stars:1, unlock:0, speed:1.28, ev:0.5, events:['stall','coach'],
+    look:{ shirt:'#3FA36B', hair:'short' },
+    lines:['ナイスー！もう1回やろっか','ドンマイドンマイ、いい感じやったよ','ゆっくりでいいけんね'] },
+  { id:'mama', name:'ママさん', stars:2, unlock:0, speed:1.12, ev:0.8, events:['stall','accel','coach'],
+    look:{ shirt:'#E98BB0', hair:'pony' },
+    lines:['あら〜惜しい！','晩ごはんの前にもう1回だけ！','上手になったねぇ'] },
+  { id:'ace', name:'エース', stars:3, unlock:0, speed:0.95, ev:1.0, events:['accel','fake','stall'],
+    look:{ shirt:'#E0393E', hair:'long' },
+    lines:['もうちょっと粘ってよ〜','次は本気出すね','ドライブ、悪くなかったよ'] },
+  { id:'jii', name:'ベテランじいちゃん', stars:2, unlock:3, speed:1.1, ev:1.7, events:['stall','stall','accel','accel'],
+    look:{ shirt:'#8C9AA8', hair:'bald', glasses:true },
+    lines:['ふぉっふぉっ、まだまだじゃ','わしの若い頃はのう…','ネットインも実力のうちじゃ'] },
+  { id:'kohai', name:'ナマイキ後輩', stars:3, unlock:8, speed:0.95, ev:1.3, events:['fake','fake','accel'],
+    look:{ shirt:'#F2B705', hair:'short' },
+    lines:['え、もう終わりっすか？','先輩、ボール見えてます？','まあまあっすね'] },
+  { id:'gachi', name:'ガチ勢くん', stars:4, unlock:15, speed:0.82, ev:1.2, events:['fake','accel','stall'],
+    look:{ shirt:'#1B2A4A', hair:'short', band:true },
+    lines:['……甘い。','フォームが崩れてる','もう1本。'] },
+  { id:'kantoku', name:'監督', stars:5, unlock:25, speed:0.74, ev:1.6, events:['coach','coach','fake','accel','stall'], boss:true,
+    img:'chars/kantoku.png', look:{ shirt:'#1B2A4A', hair:'short' },
+    lines:['かかってこんかい','まだまだやね','練習は不可能を可能にする！','声出していこう！','体験練習で待っとるけん'] },
+];
+const BOSS_ID = 'kantoku';
+// =====================================================================
+
+const W = 360, H = 640;
+const COL = {
+  wall:'#E6F6FC', wall2:'#D4EEF8', floor:'#A9DDF1', floor2:'#B8E4F4', mizu:'#A9DDF1',
+  navy:'#1B2A4A', table:'#2F78BE', tableDark:'#1B2A4A', red:'#E0393E',
+  yellow:'#FFD23F', white:'#FFFFFF', skin:'#F6D7B8', hair:'#1B2A4A', shadow:'rgba(27,42,74,.25)'
+};
+const PLAYER_LOOK = { shirt:'#1B2A4A', stripe:'#A9DDF1', hair:'short' };
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---- storage helpers
+function load(key, fallback){ try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch(e) { return fallback; } }
+function save(key, v){ try { localStorage.setItem(key, JSON.stringify(v)); } catch(e) {} }
+let bests = load('kk-bests', {}) || {};
+let plays = load('kk-plays', 0) || 0;
+let myName = load('kk-name', '') || '';
+let localRecords = load('kk-records', []) || [];
+let muted = !!load('kk-mute', false);
+
+// ---- images (optional per character)
+const IMG = {};
+for (const c of CHARACTERS){ if (c.img){ const im = new Image(); im.src = c.img; IMG[c.id] = im; } }
+function hasImg(c){ const im = IMG[c.id]; return im && im.complete && im.naturalWidth > 0; }
+
+let opponent = CHARACTERS[0];
+
+// ---- canvas sizing
+let dpr = 1, k = 1, ox = 0, oy = 0, cw = 0, ch = 0;
+function resize(){
+  const r = cv.getBoundingClientRect();
+  cw = r.width; ch = r.height; dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  k = Math.min(cw / W, ch / H); ox = (cw - W * k) / 2; oy = (ch - H * k) / 2;
+}
+window.addEventListener('resize', resize);
+
+// x across table (-1..1), z from player end (0) to far end (1), h height
+function P(x, z, h = 0){ const s = 1 - 0.4 * z; return { x: 180 + x * 120 * s, y: 480 - 230 * z - h * 170 * s, s }; }
+
+// ---- sound
+let audio = null;
+function setMuteLabel(){ $('mute').textContent = muted ? '音 OFF' : '音 ON'; $('mute').setAttribute('aria-pressed', String(muted)); }
+setMuteLabel();
+function ensureAudio(){ if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} } if (audio && audio.state === 'suspended') audio.resume(); }
+function blip(freq, dur = 0.06, vol = 0.25, type = 'triangle'){
+  if (muted || !audio) return;
+  const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq * 0.6, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+$('mute').addEventListener('click', e => { e.stopPropagation(); muted = !muted; setMuteLabel(); save('kk-mute', muted); });
+
+// ---- stick figure (also used for thumbnails)
+function drawFigure(g, fx, fy, s, look, swing, far){
+  g.save();
+  g.fillStyle = COL.shadow; g.beginPath(); g.ellipse(fx, fy, 26 * s, 7 * s, 0, 0, Math.PI * 2); g.fill();
+  const hipY = fy - 48 * s, shY = hipY - 52 * s, headY = shY - 16 * s;
+  g.strokeStyle = COL.navy; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 4 * s;
+  g.beginPath();
+  g.moveTo(fx - 20 * s, fy); g.lineTo(fx - 12 * s, hipY + 22 * s); g.lineTo(fx - 6 * s, hipY);
+  g.moveTo(fx + 20 * s, fy); g.lineTo(fx + 12 * s, hipY + 22 * s); g.lineTo(fx + 6 * s, hipY);
+  g.stroke();
+  // shorts
+  g.fillStyle = COL.navy; g.fillRect(fx - 13 * s, hipY - 4 * s, 26 * s, 12 * s);
+  // shirt
+  g.fillStyle = look.shirt || COL.navy;
+  g.beginPath(); if (g.roundRect) g.roundRect(fx - 14 * s, shY, 28 * s, hipY - shY + 2 * s, 6 * s); else g.rect(fx - 14 * s, shY, 28 * s, hipY - shY + 2 * s);
+  g.fill(); g.lineWidth = 2.5 * s; g.stroke();
+  g.fillStyle = look.stripe || COL.yellow; g.fillRect(fx - 14 * s, shY + 14 * s, 28 * s, 4 * s);
+  // free arm
+  g.lineWidth = 4 * s;
+  g.beginPath(); g.moveTo(fx - 12 * s, shY + 4 * s); g.lineTo(fx - 26 * s, shY + 26 * s); g.stroke();
+  // hair behind (long / pony)
+  g.fillStyle = COL.hair;
+  if (look.hair === 'long'){ g.beginPath(); g.ellipse(fx, headY + 6 * s, 15 * s, 16 * s, 0, 0, Math.PI * 2); g.fill(); }
+  if (look.hair === 'pony'){ g.beginPath(); g.ellipse(fx + 14 * s, headY - 2 * s, 6 * s, 10 * s, 0.5, 0, Math.PI * 2); g.fill(); }
+  // head
+  g.fillStyle = COL.skin; g.lineWidth = 3 * s;
+  g.beginPath(); g.arc(fx, headY, 13 * s, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.fillStyle = COL.hair;
+  if (look.hair === 'bald'){ g.beginPath(); g.arc(fx - 11 * s, headY, 4 * s, 0, 7); g.arc(fx + 11 * s, headY, 4 * s, 0, 7); g.fill(); }
+  else { g.beginPath(); g.arc(fx, headY - 2 * s, 13 * s, Math.PI * 1.05, Math.PI * 1.95); g.fill(); }
+  if (look.band){ g.fillStyle = COL.red; g.fillRect(fx - 13 * s, headY - 8 * s, 26 * s, 4 * s); g.fillRect(fx + 11 * s, headY - 7 * s, 9 * s, 3 * s); }
+  if (!far){
+    g.fillStyle = COL.navy;
+    g.beginPath(); g.arc(fx - 4 * s, headY + 2 * s, 1.6 * s, 0, 7); g.arc(fx + 4 * s, headY + 2 * s, 1.6 * s, 0, 7); g.fill();
+  }
+  if (look.glasses){
+    g.strokeStyle = COL.navy; g.lineWidth = 1.6 * s;
+    g.beginPath(); g.arc(fx - 5 * s, headY + 2 * s, 4 * s, 0, 7); g.moveTo(fx + 9 * s, headY + 2 * s); g.arc(fx + 5 * s, headY + 2 * s, 4 * s, 0, 7);
+    g.moveTo(fx - 1 * s, headY + 2 * s); g.lineTo(fx + 1 * s, headY + 2 * s); g.stroke();
+  }
+  // racket arm with swing
+  g.strokeStyle = COL.navy; g.lineWidth = 4 * s;
+  const ang = lerp(0.35, -1.1, Math.sin(swing * Math.PI));
+  const elbow = { x: fx + 22 * s, y: shY + 16 * s };
+  const hand = { x: elbow.x + Math.cos(ang) * 16 * s, y: elbow.y + Math.sin(ang) * 16 * s - 10 * s };
+  g.beginPath(); g.moveTo(fx + 12 * s, shY + 4 * s); g.lineTo(elbow.x, elbow.y); g.lineTo(hand.x, hand.y); g.stroke();
+  g.fillStyle = COL.red; g.lineWidth = 2 * s;
+  g.beginPath(); g.ellipse(hand.x + 6 * s, hand.y - 8 * s, 8 * s, 9.5 * s, ang, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.restore();
+}
+function drawImageChar(img, fx, fy, height, swing){
+  ctx.fillStyle = COL.shadow;
+  ctx.beginPath(); ctx.ellipse(fx, fy, height * 0.2, height * 0.045, 0, 0, Math.PI * 2); ctx.fill();
+  const w = img.naturalWidth / img.naturalHeight * height;
+  const s = Math.sin(swing * Math.PI);
+  ctx.save(); ctx.translate(fx, fy - s * height * 0.06); ctx.rotate(s * 0.12); ctx.scale(1 + s * 0.04, 1 - s * 0.04);
+  ctx.drawImage(img, -w / 2, -height, w, height); ctx.restore();
+}
+// thumbnail for menus (stick figure or image)
+const thumbCache = {};
+function thumbFor(c){
+  if (c.img && hasImg(c)) return c.img;
+  if (thumbCache[c.id]) return thumbCache[c.id];
+  const t = document.createElement('canvas'); t.width = 120; t.height = 170;
+  const g = t.getContext('2d'); drawFigure(g, 52, 162, 1.25, c.look, 0, false);
+  return (thumbCache[c.id] = t.toDataURL());
+}
+
+// ---- game state
+let state = 'title';   // title | play | missing | over
+let rally = 0, combo = 0, missTimer = 0, missReason = '';
+const player = { x: 0, tx: 0, swing: 0 };
+const opp = { x: 0, tx: 0, swing: 0 };
+let ball = null, serveTimer = 0.8;
+let popups = [], trail = [], shake = 0, banner = null, coachFlash = 0, coachText = '';
+
+function flightPos(p, t){
+  let x, z, h;
+  if (t < p.tb){ const u = t / p.tb; x = lerp(p.x0, p.xb, u); z = lerp(p.z0, p.zb, u); h = p.h0 * (1 - u) + p.a1 * Math.sin(Math.PI * u); }
+  else { const u = (t - p.tb) / (1 - p.tb); x = lerp(p.xb, p.x1, u); z = lerp(p.zb, p.z1, u); h = p.a2 * Math.sin(Math.PI * u * 0.75); }
+  return { x, z, h };
+}
+const EVENT_LABEL = { stall:'ネットイン！？', accel:'緩急サーブ', fake:'フェイント！' };
+function pickEvent(){
+  if (state === 'title' || rally < 4) return null;
+  const chance = Math.min((0.15 + rally * 0.01) * opponent.ev, 0.55);
+  if (Math.random() > chance) return null;
+  return opponent.events[Math.floor(Math.random() * opponent.events.length)];
+}
+function inDuration(){ return Math.max(0.42, 1.25 * opponent.speed * Math.pow(0.955, rally)); }
+
+function newIncoming(){
+  const ev = pickEvent();
+  const x0 = opp.x + 0.25, x1 = rnd(-0.6, 0.6);
+  let xb = (x0 + x1) / 2 + rnd(-0.15, 0.15), x1f = x1;
+  if (ev === 'fake'){ xb = x1 > 0 ? -0.75 : 0.75; x1f = x1 > 0 ? 0.65 : -0.65; }
+  let dur = inDuration();
+  if (ev === 'accel') dur *= 1.4;
+  ball = { dir:'in', ev, e:0, dur, t:0, p:{ x0, xb, x1:x1f, z0:1.22, zb:0.3, z1:-0.22, h0:0.25, a1:0.32, a2:0.42, tb:0.6 }, bounced:false };
+  player.tx = x1f - 0.25;
+  if (ev === 'coach'){ coachFlash = 1.1; coachText = opponent.id === BOSS_ID ? '声出せーー！' : '監督「声出せー！」'; blip(220, 0.25, 0.15, 'square'); }
+  else if (ev) banner = { text: EVENT_LABEL[ev], life: 1.0 };
+  opp.swing = 1; blip(760, 0.05, 0.2);
+}
+function newOutgoing(perfect, from){
+  const x1 = rnd(-0.55, 0.55);
+  const d = inDuration() * (perfect ? 0.7 : 0.95);
+  ball = { dir:'out', ev:null, e:0, dur:d, t:0, perfect,
+    p:{ x0:from.x, xb:(from.x + x1) / 2, x1, z0:from.z, zb:0.78, z1:1.22, h0:from.h, a1:perfect ? 0.18 : 0.32, a2:0.36, tb:0.5 }, bounced:false };
+  opp.tx = x1 - 0.25;
+}
+function tOf(b){
+  const p = b.e / b.dur;
+  if (b.ev === 'stall'){
+    const at = 0.35 * b.dur, len = 0.7;
+    if (b.e < at) return p;
+    if (b.e < at + len) return 0.35;
+    return (b.e - len) / b.dur;
+  }
+  if (b.ev === 'accel') return p < 1 ? Math.pow(p, 2.3) : 1 + (p - 1) * 2.3;
+  return p;
+}
+
+let fenceSlots = [];
+function shuffleFence(){ fenceSlots = Array.from({ length: 8 }, () => FENCE_WORDS[Math.floor(Math.random() * FENCE_WORDS.length)]); }
+shuffleFence();
+function resetGame(){
+  shuffleFence();
+  rally = 0; combo = 0; popups = []; trail = []; banner = null; coachFlash = 0;
+  $('rally').textContent = '0';
+  player.x = player.tx = 0; opp.x = opp.tx = 0;
+  ball = null; serveTimer = 0.9;
+}
+function hideOverlays(){ for (const id of ['titleScreen','selectScreen','overScreen']) $(id).hidden = true; }
+function showBest(){ $('best').textContent = bests[opponent.id] || 0; }
+function startGame(){
+  ensureAudio(); hideOverlays();
+  $('vsName').textContent = (myName || 'あなた') + ' VS ' + opponent.name;
+  showBest();
+  state = 'play'; resetGame();
+}
+function goTop(){
+  hideOverlays(); state = 'title'; resetGame();
+  $('vsName').textContent = '';
+  $('titleScreen').hidden = false;
+  refreshBoard();
+}
+
+// ---- name
+const NG = ['しね','死ね','ころす','殺す','うんこ','ちんこ','まんこ','fuck','shit','sex'];
+function cleanName(s){
+  s = (s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 10);
+  if (NG.some(w => s.toLowerCase().includes(w))) return '';
+  return s;
+}
+$('nameInput').value = myName;
+$('nameInput').addEventListener('input', e => { myName = cleanName(e.target.value); save('kk-name', myName); });
+
+// ---- select
+function stars(n){ return '★'.repeat(n) + '☆'.repeat(5 - n); }
+function buildSelect(){
+  const grid = $('oppGrid'); grid.innerHTML = '';
+  const normal = CHARACTERS.filter(c => !c.boss), bosses = CHARACTERS.filter(c => c.boss);
+  for (const c of normal.concat(bosses)){
+    const locked = plays < c.unlock;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'opp' + (c.boss ? ' boss' : '') + (locked ? ' locked' : '');
+    const img = document.createElement('img'); img.src = thumbFor(c); img.alt = '';
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = locked ? '？？？' : c.name;
+    const st = document.createElement('span'); st.className = 'st'; st.textContent = locked ? `あと${c.unlock - plays}回で解放` : stars(c.stars);
+    const bs = document.createElement('span'); bs.className = 'bs'; bs.textContent = locked ? '' : 'BEST ' + (bests[c.id] || 0);
+    if (c.boss){
+      const txt = document.createElement('span'); txt.className = 'txt';
+      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = 'ラスボス';
+      txt.append(tag, nm, st, bs); b.append(img, txt);
+    } else b.append(img, nm, st, bs);
+    if (locked){ b.setAttribute('aria-disabled', 'true'); }
+    else b.addEventListener('click', () => { opponent = c; startGame(); });
+    grid.appendChild(b);
+  }
+}
+function openSelect(){ buildSelect(); hideOverlays(); $('selectScreen').hidden = false; state = 'title'; }
+
+// ---- ranking (Google Sheets via Apps Script; falls back to this device's records)
+let boardTab = 'week', board = null, boardOnline = false;
+function weekKey(d = new Date()){
+  // Monday-start week in Japan time, e.g. "2026-10-12"
+  const j = new Date(d.getTime() + 9 * 3600 * 1000);
+  const day = (j.getUTCDay() + 6) % 7;
+  const m = new Date(Date.UTC(j.getUTCFullYear(), j.getUTCMonth(), j.getUTCDate() - day));
+  return m.toISOString().slice(0, 10);
+}
+function aggregate(rows){
+  const by = {};
+  for (const r of rows){
+    const a = by[r.name] || (by[r.name] = { name: r.name, rally: -1, opp: '', plays: 0 });
+    a.plays++;
+    if (r.rally > a.rally){ a.rally = r.rally; a.opp = r.opp; }
+  }
+  return Object.values(by).sort((a, b) => b.rally - a.rally || b.plays - a.plays).slice(0, 10);
+}
+function localBoard(){
+  const wk = weekKey();
+  return { week: aggregate(localRecords.filter(r => r.week === wk)), all: aggregate(localRecords) };
+}
+async function fetchBoard(){
+  if (!CONFIG.rankingUrl) return null;
+  try {
+    const res = await fetch(CONFIG.rankingUrl + '?week=' + encodeURIComponent(weekKey()), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const j = await res.json();
+    if (!j || !Array.isArray(j.week) || !Array.isArray(j.all)) return null;
+    return j;
+  } catch(e) { return null; }
+}
+async function refreshBoard(){
+  renderBoard();
+  const remote = await fetchBoard();
+  if (remote){ board = remote; boardOnline = true; } else { board = localBoard(); boardOnline = false; }
+  renderBoard();
+}
+function renderBoard(){
+  const data = board || localBoard();
+  const rows = boardTab === 'week' ? data.week : data.all;
+  $('tabWeek').setAttribute('aria-selected', String(boardTab === 'week'));
+  $('tabAll').setAttribute('aria-selected', String(boardTab === 'all'));
+  const ol = $('boardList'); ol.innerHTML = '';
+  if (!rows.length){
+    const li = document.createElement('li'); li.style.display = 'block';
+    li.textContent = boardTab === 'week' ? '今週はまだだれも記録なし。1位のチャンス！' : 'まだ記録なし';
+    ol.appendChild(li);
+  }
+  rows.forEach((r, i) => {
+    const li = document.createElement('li'); if (myName && r.name === myName) li.className = 'me';
+    const n = document.createElement('b'); n.textContent = (i + 1) + '位';
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name;
+    const v = document.createElement('span'); v.innerHTML = ''; v.append(String(r.rally) + 'ラリー ');
+    const vs = document.createElement('span'); vs.className = 'vs'; vs.textContent = 'vs ' + r.opp; v.appendChild(vs);
+    li.append(n, nm, v); ol.appendChild(li);
+  });
+  $('boardNote').textContent = boardOnline ? 'みんなの記録・今週は月曜リセット' : (CONFIG.rankingUrl ? 'ランキングに接続できないため、この端末の記録を表示中' : 'この端末の記録を表示中');
+}
+$('tabWeek').addEventListener('click', () => { boardTab = 'week'; renderBoard(); });
+$('tabAll').addEventListener('click', () => { boardTab = 'all'; renderBoard(); });
+function submitScore(rec){
+  localRecords.push(rec); if (localRecords.length > 500) localRecords = localRecords.slice(-500); save('kk-records', localRecords);
+  if (!CONFIG.rankingUrl) return Promise.resolve();
+  // text/plain keeps this a "simple" request so Apps Script accepts it without CORS preflight
+  return fetch(CONFIG.rankingUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(rec) }).catch(() => {});
+}
+
+// ---- results
+const RANKS = [
+  [0,  '見学からどうぞ'], [3,  '初心者大歓迎'], [8,  'バンビの部レベル'], [15, 'カブの部レベル'],
+  [25, 'ホープスの部レベル'], [40, '寮生レベル'], [60, 'ラリーの神'],
+];
+function rankFor(n){ let r = RANKS[0][1]; for (const [min, name] of RANKS) if (n >= min) r = name; return r; }
+
+function miss(reason){
+  if (state !== 'play') return;
+  state = 'missing'; missTimer = 0.9; missReason = reason; combo = 0;
+  popups.push({ text: reason, x: 180, y: 380, life: 1, color: COL.red, size: 34 });
+  blip(140, 0.3, 0.2, 'sawtooth');
+  shake = reduceMotion ? 0 : 6;
+}
+async function gameOver(){
+  state = 'over';
+  const before = CHARACTERS.filter(c => plays >= c.unlock).length;
+  plays++; save('kk-plays', plays);
+  const newly = CHARACTERS.filter(c => plays >= c.unlock).slice(before);
+  const prev = bests[opponent.id] || 0;
+  const isBest = rally > prev;
+  if (isBest){ bests[opponent.id] = rally; save('kk-bests', bests); showBest(); }
+  $('overReason').textContent = missReason + '　VS ' + opponent.name;
+  $('finalRally').textContent = rally;
+  $('newBest').hidden = !isBest || rally === 0;
+  $('rankName').textContent = rankFor(rally);
+  $('saysImg').src = thumbFor(opponent);
+  $('saysName').textContent = opponent.name;
+  $('saysLine').textContent = '「' + opponent.lines[Math.floor(Math.random() * opponent.lines.length)] + '」';
+  $('unlockMsg').hidden = !newly.length;
+  if (newly.length) $('unlockMsg').textContent = newly.map(c => c.name).join('・') + ' と対戦できるようになった！';
+  $('copied').textContent = '';
+  $('weekRank').hidden = true;
+  $('overScreen').hidden = false;
+  $('retryBtn').focus({ preventScroll:true });
+  if (myName && rally > 0){
+    await submitScore({ name: myName, opp: opponent.name, rally, week: weekKey(), at: Date.now() });
+    setTimeout(async () => {
+      const remote = await fetchBoard();
+      board = remote || localBoard(); boardOnline = !!remote;
+      const idx = board.week.findIndex(r => r.name === myName);
+      if (idx >= 0 && state === 'over'){ $('weekRank').textContent = `今週のランキング ${idx + 1}位！`; $('weekRank').hidden = false; }
+    }, 1200);
+  } else if (!myName){
+    $('weekRank').textContent = 'ニックネームを入れるとランキングにのるよ'; $('weekRank').hidden = false;
+  }
+}
+
+function tap(){
+  if (state !== 'play' || !ball || ball.dir !== 'in') return;
+  const t = ball.t;
+  if (t < 0.3) return;
+  if (t < 0.86){ player.swing = 1; miss('空振り…'); return; }
+  if (t <= 1.06) doHit(t, false);
+}
+function doHit(t, auto){
+  const pos = flightPos(ball.p, t);
+  const perfect = Math.abs(t - 0.97) <= 0.035;
+  player.swing = 1;
+  if (!auto){
+    rally++; $('rally').textContent = rally;
+    if (perfect){
+      combo++;
+      const words = ['ナイスドライブ！','サー！','いいよー！','チャンス！','ナイス！'];
+      popups.push({ text: combo >= 3 ? combo + '連ドライブ！' : words[Math.floor(Math.random() * words.length)], x: 180, y: 400, life: 1, color: COL.red, size: 28 });
+      shake = reduceMotion ? 0 : 4; blip(1150, 0.07, 0.3);
+    } else {
+      combo = 0;
+      popups.push({ text: 'OK', x: 180, y: 400, life: 0.7, color: COL.navy, size: 22 }); blip(900, 0.06, 0.25);
+    }
+  } else blip(900, 0.05, 0.12);
+  newOutgoing(perfect, pos);
+}
+
+// ---- links / share
+function gameUrl(){ return CONFIG.shareUrl || (location.protocol.startsWith('http') ? location.href.split('#')[0] : ''); }
+function resultText(){
+  const u = gameUrl();
+  return `石田卓球クラブの「カチカチラリー」で${opponent.name}と${rally}ラリー続いた！\n称号：${rankFor(rally)}\n#石田卓球クラブ #カチカチラリー` + (u ? '\n' + u : '');
+}
+function setupCta(){
+  const hasLine = !!CONFIG.lineUrl, hasInsta = !!CONFIG.instagramUrl;
+  $('cta').hidden = !(hasLine || hasInsta);
+  if (hasLine){ $('ctaLine').href = CONFIG.lineUrl; $('ctaLine').hidden = false; }
+  if (hasInsta){ $('ctaInsta').href = CONFIG.instagramUrl; $('ctaInsta').hidden = false; }
+  const top = $('topCta'); top.innerHTML = '';
+  const url = CONFIG.lineUrl || CONFIG.instagramUrl;
+  if (url){
+    top.append('本物の卓球もやってみない？ ');
+    const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = hasLine ? '体験の相談はLINEで' : 'クラブのインスタを見る';
+    top.appendChild(a);
+  } else top.hidden = true;
+}
+
+// ---- input
+const stage = $('stage');
+stage.addEventListener('pointerdown', e => {
+  if (e.target.closest('button') || e.target.closest('a') || e.target.closest('.overlay')) return;
+  e.preventDefault(); ensureAudio(); tap();
+});
+window.addEventListener('keydown', e => {
+  if ((e.code === 'Space' || e.code === 'Enter') && (state === 'play' || state === 'missing')){ e.preventDefault(); tap(); }
+});
+$('startBtn').addEventListener('click', openSelect);
+$('backBtn').addEventListener('click', goTop);
+$('retryBtn').addEventListener('click', startGame);
+$('changeBtn').addEventListener('click', openSelect);
+$('topBtn').addEventListener('click', goTop);
+$('homeBtn').addEventListener('click', e => { e.stopPropagation(); goTop(); });
+$('shareBtn').addEventListener('click', async () => {
+  const text = resultText();
+  if (navigator.share){
+    try { await navigator.share({ text }); return; } catch(err) { if (err && err.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a'); a.href = 'https://line.me/R/share?text=' + encodeURIComponent(text);
+  a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+});
+$('copyBtn').addEventListener('click', () => {
+  const text = resultText();
+  const done = () => { $('copied').textContent = 'コピーしました'; };
+  const fallback = () => {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch(err) { $('copied').textContent = 'コピーできませんでした'; }
+    ta.remove();
+  };
+  try { navigator.clipboard.writeText(text).then(done, fallback); } catch(err) { fallback(); }
+});
+document.addEventListener('visibilitychange', () => { last = performance.now(); });
+
+// ---- update
+function update(dt){
+  player.x += (player.tx - player.x) * Math.min(1, dt * 8);
+  opp.x += (opp.tx - opp.x) * Math.min(1, dt * 7);
+  player.swing = Math.max(0, player.swing - dt * 5);
+  opp.swing = Math.max(0, opp.swing - dt * 5);
+  shake = Math.max(0, shake - dt * 30);
+  coachFlash = Math.max(0, coachFlash - dt);
+  if (banner){ banner.life -= dt * 0.9; if (banner.life <= 0) banner = null; }
+  popups.forEach(p => { p.life -= dt * 1.2; p.y -= dt * 40; });
+  popups = popups.filter(p => p.life > 0);
+  if (state === 'over') return;
+  if (state === 'missing'){
+    missTimer -= dt;
+    if (ball){ ball.e += dt; ball.t = tOf(ball); }
+    if (missTimer <= 0) gameOver();
+    return;
+  }
+  if (!ball){ serveTimer -= dt; if (serveTimer <= 0) newIncoming(); return; }
+  ball.e += dt; ball.t = tOf(ball);
+  const pos = flightPos(ball.p, ball.t);
+  if (ball.dir === 'out' && ball.perfect) trail.push({ ...pos, life: 1 });
+  trail.forEach(q => q.life -= dt * 4); trail = trail.filter(q => q.life > 0);
+  if (!ball.bounced && ball.t >= ball.p.tb){ ball.bounced = true; blip(ball.dir === 'in' ? 520 : 480, 0.04, 0.15); }
+  if (ball.dir === 'in'){
+    if (state === 'title' && ball.t >= 0.97){ doHit(ball.t, true); return; }
+    if (ball.t > 1.1) miss('見送り…');
+  } else if (ball.t >= 1) newIncoming();
+}
+
+// ---- draw
+function drawBackground(){
+  const left = -ox / k, right = (cw - ox) / k, top = -oy / k, bottom = (ch - oy) / k;
+  ctx.fillStyle = COL.floor; ctx.fillRect(left, top, right - left, bottom - top);
+  ctx.fillStyle = COL.floor2;
+  for (let i = 0; i < 9; i++){ const y = 175 + i * i * 6.5; ctx.fillRect(left, y, right - left, 3 + i * 0.6); }
+  ctx.fillStyle = COL.wall; ctx.fillRect(left, top, right - left, 128 - top);
+  ctx.fillStyle = COL.wall2;
+  for (let x = Math.floor(left / 40) * 40; x < right; x += 40) ctx.fillRect(x, 30, 3, 98);
+  ctx.fillStyle = COL.white;
+  for (let x = 20; x < 360; x += 110) ctx.fillRect(x, 44, 70, 34);
+  ctx.strokeStyle = COL.wall2; ctx.lineWidth = 2;
+  for (let x = 20; x < 360; x += 110){ ctx.strokeRect(x, 44, 70, 34); ctx.beginPath(); ctx.moveTo(x + 35, 44); ctx.lineTo(x + 35, 78); ctx.stroke(); }
+  ctx.fillStyle = COL.navy; ctx.fillRect(left, 128, right - left, 44);
+  ctx.fillStyle = COL.red; ctx.fillRect(left, 168, right - left, 4);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  let bi = 0;
+  for (let x = Math.floor((left - 60) / 120) * 120 + 60; x < right + 60; x += 120){
+    const i = bi++;
+    const t = i % 2 === 0 ? '石田卓球クラブ' : fenceSlots[i % fenceSlots.length];
+    ctx.fillStyle = i % 2 === 0 ? COL.white : COL.yellow;
+    ctx.font = '14px "DotGothic16", monospace';
+    const tw = ctx.measureText(t).width;
+    if (tw > 110){ ctx.save(); ctx.translate(x, 150); ctx.scale(110 / tw, 1); ctx.fillText(t, 0, 0); ctx.restore(); }
+    else ctx.fillText(t, x, 150);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(x + 59, 132, 2, 36);
+  }
+}
+function quad(a, b, c, d, fill){ ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); }
+function drawTable(){
+  ctx.fillStyle = COL.tableDark;
+  for (const [x, z] of [[-0.85, 0.08], [0.85, 0.08], [-0.85, 0.92], [0.85, 0.92]]){
+    const a = P(x, z, 0), b = P(x, z, -0.35); ctx.fillRect(a.x - 3 * a.s, a.y, 6 * a.s, b.y - a.y);
+  }
+  const nl = P(-1, 0), nr = P(1, 0), fr = P(1, 1), fl = P(-1, 1);
+  quad(nl, nr, { x: nr.x, y: nr.y + 10 }, { x: nl.x, y: nl.y + 10 }, COL.tableDark);
+  quad(nl, nr, fr, fl, COL.table);
+  ctx.strokeStyle = COL.white; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(nl.x, nl.y); ctx.lineTo(nr.x, nr.y); ctx.lineTo(fr.x, fr.y); ctx.lineTo(fl.x, fl.y); ctx.closePath(); ctx.stroke();
+  const cn = P(0, 0), cf = P(0, 1);
+  ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cn.x, cn.y); ctx.lineTo(cf.x, cf.y); ctx.stroke();
+}
+function drawNet(){
+  const bl = P(-1.08, 0.5), br = P(1.08, 0.5), tl = P(-1.08, 0.5, 0.11), tr = P(1.08, 0.5, 0.11);
+  quad(bl, br, tr, tl, 'rgba(255,255,255,.45)');
+  ctx.strokeStyle = COL.white; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(tl.x, tl.y); ctx.lineTo(tr.x, tr.y); ctx.stroke();
+  ctx.strokeStyle = COL.navy; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(bl.x, bl.y); ctx.lineTo(tl.x, tl.y); ctx.moveTo(br.x, br.y); ctx.lineTo(tr.x, tr.y); ctx.stroke();
+}
+function drawOpponent(){
+  const f = P(opp.x, 1.3, -0.35);
+  if (opponent.img && hasImg(opponent)) drawImageChar(IMG[opponent.id], f.x + 8, f.y, 112, opp.swing);
+  else drawFigure(ctx, f.x, f.y, f.s, opponent.look, opp.swing, true);
+}
+function drawPlayer(){
+  const f = P(player.x, -0.32, -0.35);
+  drawFigure(ctx, f.x, f.y, f.s, PLAYER_LOOK, player.swing, false);
+  if (myName && state !== 'title'){
+    ctx.font = '13px "DotGothic16", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(myName).width + 14;
+    ctx.fillStyle = COL.navy; ctx.fillRect(f.x - tw / 2, f.y + 4, tw, 18);
+    ctx.fillStyle = COL.white; ctx.fillText(myName, f.x, f.y + 13);
+  }
+}
+function drawHitRing(){
+  if (!ball || ball.dir !== 'in' || state !== 'play') return;
+  const tgt = flightPos(ball.p, 0.97);
+  const g = P(tgt.x, tgt.z, -0.35);
+  const active = ball.t >= 0.86 && ball.t <= 1.06;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 90);
+  ctx.lineWidth = active ? 4 : 2;
+  ctx.strokeStyle = active ? COL.yellow : 'rgba(255,255,255,.85)';
+  ctx.beginPath(); ctx.ellipse(g.x, g.y - 4, 26 + (active ? pulse * 4 : 0), 9 + (active ? pulse * 1.5 : 0), 0, 0, Math.PI * 2); ctx.stroke();
+}
+function drawBall(){
+  if (!ball) return;
+  const pos = flightPos(ball.p, ball.t);
+  const onTable = pos.z >= 0 && pos.z <= 1 && Math.abs(pos.x) <= 1;
+  const sh = P(pos.x, pos.z, onTable ? 0 : -0.35);
+  ctx.fillStyle = COL.shadow; ctx.beginPath(); ctx.ellipse(sh.x, sh.y, 6 * sh.s, 2.5 * sh.s, 0, 0, Math.PI * 2); ctx.fill();
+  for (const q of trail){ const b = P(q.x, q.z, q.h); ctx.fillStyle = `rgba(255,210,63,${q.life * 0.6})`; ctx.beginPath(); ctx.arc(b.x, b.y, 5 * b.s, 0, 7); ctx.fill(); }
+  const b = P(pos.x, pos.z, pos.h);
+  ctx.fillStyle = COL.white; ctx.strokeStyle = COL.navy; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(b.x, b.y, 6 * b.s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+}
+function drawPopups(){
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const p of popups){
+    ctx.globalAlpha = clamp(p.life, 0, 1);
+    ctx.font = `${p.size}px "DotGothic16", monospace`;
+    ctx.lineWidth = 6; ctx.strokeStyle = COL.white; ctx.strokeText(p.text, p.x, p.y);
+    ctx.fillStyle = p.color; ctx.fillText(p.text, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+  if (banner){
+    ctx.globalAlpha = clamp(banner.life * 2, 0, 1);
+    ctx.fillStyle = COL.yellow; ctx.fillRect(40, 214, 280, 40);
+    ctx.strokeStyle = COL.navy; ctx.lineWidth = 3; ctx.strokeRect(40, 214, 280, 40);
+    ctx.fillStyle = COL.navy; ctx.font = '24px "DotGothic16", monospace'; ctx.fillText(banner.text, 180, 235);
+    ctx.globalAlpha = 1;
+  }
+  if (coachFlash > 0){
+    const a = clamp(coachFlash * 2, 0, 1);
+    ctx.globalAlpha = a * 0.92; ctx.fillStyle = COL.red; ctx.fillRect(-ox / k, 200, cw / k, 110);
+    ctx.globalAlpha = a;
+    const boss = CHARACTERS.find(c => c.id === BOSS_ID);
+    let tx = 180;
+    if (boss && hasImg(boss)){ const im = IMG[boss.id], h = 120, w = im.naturalWidth / im.naturalHeight * h; ctx.drawImage(im, 8, 310 - h, w, h); tx = 205; }
+    ctx.fillStyle = COL.white; ctx.font = '32px "DotGothic16", monospace'; ctx.fillText(coachText, tx, 255);
+    ctx.globalAlpha = 1;
+  }
+}
+function draw(){
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+  const sx = shake ? rnd(-shake, shake) : 0, sy = shake ? rnd(-shake, shake) : 0;
+  ctx.setTransform(k * dpr, 0, 0, k * dpr, (ox + sx) * dpr, (oy + sy) * dpr);
+  drawBackground();
+  drawOpponent();
+  drawTable();
+  const pos = ball ? flightPos(ball.p, ball.t) : null;
+  drawHitRing();
+  if (pos && pos.z > 0.5){ drawBall(); drawNet(); } else { drawNet(); drawBall(); }
+  drawPlayer();
+  drawPopups();
+}
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+setupCta();
+resize();
+refreshBoard();
+requestAnimationFrame(loop);
+})();
+</script>
+
+</html>
