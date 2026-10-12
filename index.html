@@ -127,6 +127,15 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(-
 .opp.boss .st{color:var(--yellow)}
 .opp.boss .tag{font-family:var(--f-display);font-size:11px;background:var(--red);color:var(--white);border-radius:999px;padding:1px 8px}
 @media (prefers-reduced-motion: reduce){ .btn:active{transform:none} }
+/* short screens (PC browser windows, embedded frames): tighten the cards so less scrolling is needed */
+@media (max-height: 900px){
+  .card{gap:9px;padding:14px 16px 12px}
+  .title{font-size:30px}
+  .lead{font-size:13px;line-height:1.5}
+  .rules{font-size:12px;gap:3px;padding:8px 10px}
+  .btn{font-size:19px;padding:9px}
+  .big{font-size:52px}
+}
 </style>
 
 <div id="stage" aria-label="卓球ゲーム画面">
